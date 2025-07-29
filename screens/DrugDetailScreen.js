@@ -20,42 +20,46 @@ const DrugDetailScreen = () => {
   const route = useRoute();
 const { brandName, genericName, name } = route.params;
 const searchName = name || brandName || genericName;
-  useEffect(() => {
-    const fetchDrugDetails = async () => {
-      try {
-        if (brandName) {
-          const brandRes = await fetch(
-            `https://api.fda.gov/drug/label.json?search=openfda.brand_name:"${brandName}"&limit=1`
-          );
-          const brandData = await brandRes.json();
-          if (brandData.results?.length > 0) {
-            setDrug(brandData.results[0]);
-            return;
-          }
-        }
+useEffect(() => {
+  const fetchDrugDetails = async () => {
+    try {
+      const queryBrand = brandName || name;
+      const queryGeneric = genericName || name;
 
-        if (genericName) {
-          const genericRes = await fetch(
-            `https://api.fda.gov/drug/label.json?search=openfda.generic_name:"${genericName}"&limit=1`
-          );
-          const genericData = await genericRes.json();
-          if (genericData.results?.length > 0) {
-            setDrug(genericData.results[0]);
-            return;
-          }
+      if (queryBrand) {
+        const brandRes = await fetch(
+          `https://api.fda.gov/drug/label.json?search=openfda.brand_name:"${queryBrand}"&limit=1`
+        );
+        const brandData = await brandRes.json();
+        if (brandData.results?.length > 0) {
+          setDrug(brandData.results[0]);
+          return;
         }
-
-        Alert.alert("Drug Not Found", "Try a different brand or generic name.");
-      } catch (err) {
-        Alert.alert("Error", "Failed to fetch drug details.");
-        console.error(err);
-      } finally {
-        setLoading(false);
       }
-    };
 
-    fetchDrugDetails();
-  }, [name]);
+      if (queryGeneric) {
+        const genericRes = await fetch(
+          `https://api.fda.gov/drug/label.json?search=openfda.generic_name:"${queryGeneric}"&limit=1`
+        );
+        const genericData = await genericRes.json();
+        if (genericData.results?.length > 0) {
+          setDrug(genericData.results[0]);
+          return;
+        }
+      }
+
+      Alert.alert("Drug Not Found", "Try a different brand or generic name.");
+    } catch (err) {
+      Alert.alert("Error", "Failed to fetch drug details.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchDrugDetails();
+}, [brandName, genericName, name]);
+
 
   const getField = (field) => drug?.[field]?.[0] || "N/A";
   const getOpenFDA = (field) => drug?.openfda?.[field]?.[0] || "N/A";
@@ -119,7 +123,7 @@ const searchName = name || brandName || genericName;
             { backgroundColor: "#28a745", marginTop: 12 },
           ]}
           onPress={() =>
-            navigation.navigate("MapScreen", {
+            navigation.navigate("Map", {
               drugName: getOpenFDA("brand_name"),
             })
           }
