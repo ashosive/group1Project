@@ -8,58 +8,84 @@ import {
   Alert,
   TouchableOpacity,
 } from "react-native";
-import { addDoc, collection } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  getDocs,
+  deleteDoc,
+  doc,
+} from "firebase/firestore";
 import { db } from "../services/firebase";
 import { useNavigation, useRoute } from "@react-navigation/native";
 
 const DrugDetailScreen = () => {
   const [drug, setDrug] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isSaved, setIsSaved] = useState(false);
+  const [savedDocId, setSavedDocId] = useState(null);
 
   const navigation = useNavigation();
   const route = useRoute();
-const { brandName, genericName, name } = route.params;
-const searchName = name || brandName || genericName;
-useEffect(() => {
-  const fetchDrugDetails = async () => {
-    try {
-      const queryBrand = brandName || name;
-      const queryGeneric = genericName || name;
+  const { brandName, genericName, name } = route.params;
+  const searchName = name || brandName || genericName;
 
-      if (queryBrand) {
-        const brandRes = await fetch(
-          `https://api.fda.gov/drug/label.json?search=openfda.brand_name:"${queryBrand}"&limit=1`
-        );
-        const brandData = await brandRes.json();
-        if (brandData.results?.length > 0) {
-          setDrug(brandData.results[0]);
-          return;
+  useEffect(() => {
+    const fetchDrugDetails = async () => {
+      try {
+        const queryBrand = brandName || name;
+        const queryGeneric = genericName || name;
+
+        if (queryBrand) {
+          const brandRes = await fetch(
+            `https://api.fda.gov/drug/label.json?search=openfda.brand_name:"${queryBrand}"&limit=1`
+          );
+          const brandData = await brandRes.json();
+          if (brandData.results?.length > 0) {
+            setDrug(brandData.results[0]);
+            return;
+          }
         }
-      }
 
-      if (queryGeneric) {
-        const genericRes = await fetch(
-          `https://api.fda.gov/drug/label.json?search=openfda.generic_name:"${queryGeneric}"&limit=1`
-        );
-        const genericData = await genericRes.json();
-        if (genericData.results?.length > 0) {
-          setDrug(genericData.results[0]);
-          return;
+        if (queryGeneric) {
+          const genericRes = await fetch(
+            `https://api.fda.gov/drug/label.json?search=openfda.generic_name:"${queryGeneric}"&limit=1`
+          );
+          const genericData = await genericRes.json();
+          if (genericData.results?.length > 0) {
+            setDrug(genericData.results[0]);
+            return;
+          }
         }
+
+        Alert.alert("Drug Not Found", "Try a different brand or generic name.");
+      } catch (err) {
+        Alert.alert("Error", "Failed to fetch drug details.");
+        console.error(err);
+      } finally {
+        setLoading(false);
       }
+    };
 
-      Alert.alert("Drug Not Found", "Try a different brand or generic name.");
-    } catch (err) {
-      Alert.alert("Error", "Failed to fetch drug details.");
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    fetchDrugDetails();
+  }, [brandName, genericName, name]);
 
-  fetchDrugDetails();
-}, [brandName, genericName, name]);
+  useEffect(() => {
+    const checkIfSaved = async () => {
+      const brand = getOpenFDA("brand_name")?.toUpperCase();
+      const generic = getOpenFDA("generic_name")?.toLowerCase();
 
+      const snapshot = await getDocs(collection(db, "savedDrugs"));
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.brand === brand || data.generic === generic) {
+          setIsSaved(true);
+          setSavedDocId(docSnap.id);
+        }
+      });
+    };
+
+    if (drug) checkIfSaved();
+  }, [drug]);
 
   const getField = (field) => drug?.[field]?.[0] || "N/A";
   const getOpenFDA = (field) => drug?.openfda?.[field]?.[0] || "N/A";
@@ -74,9 +100,31 @@ useEffect(() => {
         savedAt: Date.now(),
       });
       Alert.alert("Saved", "Drug saved to favorites.");
+      setIsSaved(true);
     } catch (err) {
       Alert.alert("Error", "Failed to save drug.");
     }
+  };
+
+  const handleRemove = async () => {
+    if (!savedDocId) return;
+    Alert.alert("Remove Drug", "Are you sure you want to remove this drug?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteDoc(doc(db, "savedDrugs", savedDocId));
+            setIsSaved(false);
+            setSavedDocId(null);
+            Alert.alert("Removed", "Drug removed from favorites.");
+          } catch (err) {
+            Alert.alert("Error", "Failed to remove drug.");
+          }
+        },
+      },
+    ]);
   };
 
   if (loading) {
@@ -113,9 +161,18 @@ useEffect(() => {
       </ScrollView>
 
       <View style={styles.buttonGroup}>
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>💾 Save This Drug</Text>
-        </TouchableOpacity>
+        {isSaved ? (
+          <TouchableOpacity
+            style={[styles.saveButton, { backgroundColor: "#dc3545" }]}
+            onPress={handleRemove}
+          >
+            <Text style={styles.saveButtonText}>❌ Remove This Drug</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+            <Text style={styles.saveButtonText}>💾 Save This Drug</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={[
